@@ -1,5 +1,4 @@
 import streamlit as st
-import os
 import re
 import requests
 
@@ -8,10 +7,8 @@ st.set_page_config(page_title="Tải Ảnh Thang Máy HD", layout="wide")
 st.title("🏗️ Công cụ Tải Ảnh Thang máy HD")
 
 def clean_url_to_hd(url):
-    hd_url = re.sub(r'~tplv-tiktok-shrink[^?]*', '', url)
-    if '.jpeg?' in hd_url: hd_url = hd_url.split('.jpeg?')[0] + '.jpeg'
-    if '.jpg?' in hd_url: hd_url = hd_url.split('.jpg?')[0] + '.jpg'
-    if '.webp?' in hd_url: hd_url = hd_url.split('.webp?')[0] + '.webp'
+    # CHỈ xóa phần lệnh nén (shrink), GIỮ LẠI phần chìa khóa bảo mật sau dấu & hoặc ?
+    hd_url = re.sub(r'~tplv-tiktok-shrink:[0-9]+:[0-9]+', '', url)
     return hd_url
 
 # --- GIAO DIỆN ---
@@ -27,6 +24,7 @@ if st.button("🚀 Bắt đầu lấy ảnh HD"):
             all_hd_links = []
             for url in links:
                 try:
+                    # Gọi cổng dữ liệu
                     res = requests.get(f"https://www.tikwm.com/api/?url={url}", timeout=10).json()
                     imgs = res.get('data', {}).get('images', [])
                     if imgs:
@@ -39,19 +37,20 @@ if st.button("🚀 Bắt đầu lấy ảnh HD"):
                 all_hd_links = list(dict.fromkeys(all_hd_links)) # Lọc trùng
                 status.update(label="✅ Đã tìm thấy ảnh!", state="complete")
                 
-                st.success(f"Tìm thấy {len(all_hd_links)} ảnh. Bạn có thể xem và tải trực tiếp bên dưới.")
+                st.success(f"Tìm thấy {len(all_hd_links)} ảnh. Nếu ảnh không hiện, hãy bấm nút 'Mở ảnh' bên dưới.")
                 
-                # Hiển thị ảnh theo dạng lưới
+                # Hiển thị ảnh
                 cols = st.columns(3)
                 for i, img_url in enumerate(all_hd_links):
                     with cols[i % 3]:
+                        # Thử hiển thị trực tiếp
                         st.image(img_url, use_container_width=True)
-                        # Nút bấm đã được sửa lỗi tham số
+                        # Nút mở link có kèm chìa khóa bảo mật
                         st.markdown(
                             f'<a href="{img_url}" target="_blank" style="text-decoration:none;">'
-                            f'<button style="width:100%; border-radius:5px; background-color:#008CBA; color:white; border:none; padding:10px; cursor:pointer;">'
-                            f'Mở ảnh HD để lưu</button></a>', 
+                            f'<button style="width:100%; border-radius:5px; background-color:#25d366; color:white; border:none; padding:10px; cursor:pointer; font-weight:bold;">'
+                            f'🔓 MỞ ẢNH GỐC HD</button></a>', 
                             unsafe_allow_html=True
                         )
             else:
-                st.error("❌ Không tìm thấy dữ liệu. Có thể link bị lỗi hoặc TikTok đang chặn.")
+                st.error("❌ Không lấy được dữ liệu. Vui lòng kiểm tra lại link TikTok.")
