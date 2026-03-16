@@ -88,6 +88,31 @@ if st.button("🚀 Bắt đầu lấy ảnh HD"):
                 st.subheader("Xem trước ảnh đã tải:")
                 cols = st.columns(3)
                 for i, img_file in enumerate(os.listdir(base_folder)):
+
+                st.write("📦 Đang nén file...")
+                # Thêm lệnh chờ 2 giây để đảm bảo ảnh đã nằm trên đĩa cứng của server
+                time.sleep(2) 
+                
+                with zipfile.ZipFile(zip_name, 'w', zipfile.ZIP_DEFLATED) as z:
+                    for f in os.listdir(base_folder):
+                        file_path = os.path.join(base_folder, f)
+                        # Chỉ nén nếu file có dung lượng (tránh file lỗi 0kb)
+                        if os.path.getsize(file_path) > 0:
+                            z.write(file_path, arcname=f)
+                
+                # Chờ thêm 1 giây để file Zip được đóng hoàn toàn
+                time.sleep(1) 
+                
+                status.update(label="✅ Đã xử lý xong!", state="complete", expanded=False)
+                
+                # --- NÚT TẢI FILE ZIP ---
+                with open(zip_name, "rb") as f:
+                    st.download_button(
+                        label="📥 TẢI TOÀN BỘ FILE ZIP VỀ MÁY",
+                        data=f.read(), # Thêm .read() để đảm bảo đọc hết nội dung file
+                        file_name="bo_suu_tap_thang_may_hd.zip",
+                        mime="application/zip"
+                    )
                     with cols[i % 3]:
                         st.image(os.path.join(base_folder, img_file))
             else:
