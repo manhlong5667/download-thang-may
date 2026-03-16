@@ -7,13 +7,12 @@ import requests
 import shutil
 from concurrent.futures import ThreadPoolExecutor
 
-# --- CẤU HÌNH GIAO DIỆN ---
+# --- CẤU HÌNH ---
 st.set_page_config(page_title="Hệ thống Tư liệu Thang máy", layout="wide")
 st.title("🏗️ Công cụ Quản lý Ảnh Thang máy HD")
-st.markdown("Dán link TikTok vào ô dưới đây để xem và tải trọn bộ ảnh mẫu chất lượng cao.")
 
 def clean_url_to_hd(url):
-    # Xóa lệnh nén nhưng giữ lại chìa khóa bảo mật để không bị lỗi 403
+    # Xóa lệnh nén, giữ lại token bảo mật
     hd_url = re.sub(r'~tplv-tiktok-shrink:[0-9]+:[0-9]+', '', url)
     return hd_url
 
@@ -32,74 +31,63 @@ def download_image_task(args):
     except:
         return False
 
-# --- PHẦN NHẬP LIỆU ---
-links_input = st.text_area("Danh sách link TikTok (mỗi dòng một link):", height=150)
+# --- GIAO DIỆN ---
+links_input = st.text_area("Dán các link TikTok vào đây (mỗi link một dòng):", height=150, placeholder="Dán link 1...\nDán link 2...")
 
-if st.button("🚀 Bắt đầu xử lý"):
-    if not links_input:
-        st.warning("Vui lòng dán ít nhất một đường dẫn!")
+if st.button("🚀 Bắt đầu lấy tất cả ảnh"):
+    # Tách link và loại bỏ khoảng trắng thừa
+    raw_links = links_input.split('\n')
+    links = [l.strip() for l in raw_links if "tiktok.com" in l]
+    
+    if not links:
+        st.warning("Vui lòng dán link TikTok hợp lệ!")
     else:
-        links = [l.strip() for l in links_input.split('\n') if l.strip()]
-        base_folder = "kho_anh_tam"
+        base_folder = "tong_hop_anh"
         zip_name = "bo_suu_tap_thang_may.zip"
         
-        # Làm sạch dữ liệu cũ
         if os.path.exists(base_folder): shutil.rmtree(base_folder)
         os.makedirs(base_folder)
-        if os.path.exists(zip_name): os.remove(zip_name)
 
-        with st.status("🔄 Hệ thống đang truy quét dữ liệu...", expanded=True) as status:
+        with st.status("🔄 Đang quét từng link một...", expanded=True) as status:
             all_hd_links = []
-            for url in links:
+            
+            # VÒNG LẶP XỬ LÝ TỪNG LINK
+            for index, url in enumerate(links):
+                st.write(f"正在 quét link thứ {index+1}...")
                 try:
                     res = requests.get(f"https://www.tikwm.com/api/?url={url}", timeout=15).json()
                     imgs = res.get('data', {}).get('images', [])
                     if imgs:
-                        all_hd_links.extend([clean_url_to_hd(img) for img in imgs])
-                except: pass
+                        # Gom hết link ảnh HD vào danh sách chung
+                        for img in imgs:
+                            all_hd_links.append(clean_url_to_hd(img))
+                except:
+                    st.error(f"Lỗi khi đọc link {index+1}")
 
             if all_hd_links:
                 all_hd_links = list(dict.fromkeys(all_hd_links)) # Lọc trùng
+                st.write(f"📥 Đang tải tổng cộng {len(all_hd_links)} ảnh từ tất cả các link...")
                 
-                # Bước 1: Tải về server để nén Zip
-                st.write(f"📥 Đang tải {len(all_hd_links)} ảnh về hệ thống...")
-                tasks = [(link, f"thang_may_hd_{i+1}", base_folder) for i, link in enumerate(all_hd_links)]
-                with ThreadPoolExecutor(max_workers=8) as executor:
+                # Tải ảnh song song
+                tasks = [(link, f"anh_mau_{i+1}", base_folder) for i, link in enumerate(all_hd_links)]
+                with ThreadPoolExecutor(max_workers=10) as executor:
                     executor.map(download_image_task, tasks)
                 
-                time.sleep(2) # Chờ ghi đĩa
+                time.sleep(2)
                 
-                # Bước 2: Đóng gói Zip
+                # Nén Zip
                 valid_files = [f for f in os.listdir(base_folder) if os.path.getsize(os.path.join(base_folder, f)) > 0]
                 if valid_files:
                     with zipfile.ZipFile(zip_name, 'w', zipfile.ZIP_DEFLATED) as z:
                         for f in valid_files:
                             z.write(os.path.join(base_folder, f), arcname=f)
                     
-                    status.update(label="✅ Đã xử lý xong!", state="complete")
+                    status.update(label=f"✅ Xong! Đã gom ảnh từ {len(links)} link.", state="complete")
                     
-                    # --- NÚT TẢI FILE ZIP (HIỆN TRÊN CÙNG CHO TIỆN) ---
+                    # Nút tải Zip
                     with open(zip_name, "rb") as f:
                         st.download_button(
-                            label="📥 TẢI TOÀN BỘ FILE ZIP (MỌI ẢNH)",
+                            label=f"📂 TẢI VỀ TẤT CẢ {len(valid_files)} ẢNH (ZIP)",
                             data=f.read(),
-                            file_name="bo_suu_tap_thang_may_HD.zip",
+                            file_name="tong_hop_thang_may_hd.zip",
                             mime="application/zip",
-                            use_container_width=True
-                        )
-                    
-                    st.divider()
-                    
-                    # --- HIỂN THỊ XEM TRƯỚC TỪNG ẢNH ---
-                    st.subheader("🖼️ Xem chi tiết từng ảnh:")
-                    cols = st.columns(3)
-                    for i, img_file in enumerate(valid_files):
-                        img_path = os.path.join(base_folder, img_file)
-                        with cols[i % 3]:
-                            st.image(img_path, use_container_width=True)
-                            # Nút xem ảnh gốc nếu muốn lưu lẻ
-                            st.markdown(f'<a href="{all_hd_links[i]}" target="_blank" style="text-decoration:none;"><button style="width:100%; border-radius:5px; background-color:#f0f2f6; color:#31333F; border:1px solid #d1d5db; padding:5px; margin-bottom:20px; cursor:pointer;">Mở ảnh gốc</button></a>', unsafe_allow_html=True)
-                else:
-                    st.error("❌ Không thể tải ảnh về máy chủ do TikTok chặn IP. Hãy thử lại sau ít phút.")
-            else:
-                st.error("❌ Không tìm thấy dữ liệu ảnh. Vui lòng kiểm tra lại link.")
